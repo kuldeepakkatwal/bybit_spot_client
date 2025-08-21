@@ -202,6 +202,11 @@ db = DatabaseClient(
 - `update(table_name, data, where_clause, where_params)` - Update records
 - `select(table_name, columns, where_clause, where_params)` - Query records
 - `delete(table_name, where_clause, where_params)` - Delete records
+- `execute_query(query, params, fetch)` - Execute raw SQL queries
+- `execute_transaction(queries)` - Execute multiple queries in a transaction
+- `table_exists(table_name)` - Check if a table exists
+- `get_connection_pool_status()` - Get connection pool statistics
+- `close()` - Close all database connections
 
 ### WebSocketClient
 
@@ -217,8 +222,13 @@ ws = WebSocketClient(api_key, api_secret, testnet=True)
 - `subscribe_orders(callback)` - Get order updates
 - `subscribe_positions(callback)` - Get position updates
 - `subscribe_executions(callback)` - Get trade executions
+- `subscribe_wallet(callback)` - Get wallet balance updates
+- `subscribe_custom(topics, callback)` - Subscribe to custom topics
+- `unsubscribe(topic)` - Unsubscribe from a specific topic
 - `start()` - Start WebSocket connection
 - `stop()` - Stop WebSocket connection
+- `get_subscriptions()` - Get list of active subscriptions
+- `is_connected()` - Check if WebSocket is connected
 
 ### OrderManager (Optional)
 
@@ -233,12 +243,20 @@ manager = OrderManager(
     db_params={"dbname": "trading", "user": "postgres", "password": "pass"},
     testnet=True
 )
-
-# Setup and use
-manager.setup_database("orders", columns=[...])
-manager.start_order_tracking()
-manager.place_spot_order("BTCUSDT", "Buy", "Limit", "0.001", "50000")
 ```
+
+**Methods:**
+- `setup_database(table_name, columns)` - Initialize database table for orders
+- `start_order_tracking(callbacks)` - Start WebSocket tracking with custom callbacks
+- `place_spot_order(symbol, side, order_type, qty, price)` - Place order and save to DB
+- `place_order_simple(order_dict)` - Place order using dictionary format
+- `cancel_spot_order(symbol, order_id)` - Cancel order and update DB
+- `get_order_history(symbol, limit)` - Get historical orders from exchange
+- `get_active_orders()` - Get active orders from database
+- `sync_orders_with_exchange()` - Sync database with exchange order status
+- `get_spot_balance(coin)` - Get wallet balance
+- `get_ticker(symbol)` - Get current market price
+- `disconnect()` - Stop tracking and close connections
 
 ## 💡 Usage Examples
 
