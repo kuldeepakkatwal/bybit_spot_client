@@ -1,9 +1,0 @@
-# Core Dependencies
-pybit==5.6.2                    # Bybit API wrapper for trading operations
-psycopg2-binary==2.9.9          # PostgreSQL adapter for database operations
-websocket-client==1.6.4         # WebSocket client for real-time updates
-
-# Optional Dependencies (uncomment if needed)
-# python-dotenv==1.0.0          # For loading environment variables from .env files
-# requests==2.31.0              # HTTP library (usually installed with pybit)
-# certifi>=2023.0.0             # SSL certificates (usually installed with requests)

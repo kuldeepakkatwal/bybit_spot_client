@@ -1,30 +1,31 @@
 """
-Spot Trading Client for Bybit Exchange
+Bybit Spot Trading Client
 
-This client handles ONLY spot trading operations with Bybit.
-No database dependencies, no WebSocket - just clean spot trading functionality.
+A focused client for Bybit spot trading operations with WebSocket support.
+Provides direct access to spot trading endpoints without unnecessary abstractions.
+No database dependencies, no derivatives/futures functionality.
 """
 
 import logging
-from pybit.unified_trading import HTTP
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
+from pybit.unified_trading import HTTP, WebSocket
 
 
-class TradingClient:
+class BybitSpotClient:
     """
-    A focused client for Bybit spot trading operations.
+    A unified client for Bybit spot trading with real-time WebSocket support.
     
     Features:
-    - Place spot orders (limit, market)
-    - Cancel spot orders
-    - Get order status
-    - Get spot balances
-    - No leverage (spot trading only)
+    - Place and cancel spot orders
+    - Check balances and order status
+    - Real-time order and execution updates
+    - WebSocket subscriptions for live data
+    - No leverage, no derivatives - pure spot trading
     """
     
     def __init__(self, api_key: str, api_secret: str, testnet: bool = True):
         """
-        Initialize the Spot Trading Client.
+        Initialize the Unified Spot Trading Client.
         
         Args:
             api_key: Your Bybit API key
@@ -33,16 +34,26 @@ class TradingClient:
         """
         self.logger = logging.getLogger(__name__)
         self.testnet = testnet
-        self.category = "spot"  # Fixed to spot trading
+        self.category = "spot"  # Fixed to spot trading only
         
-        # Initialize Bybit HTTP Client
+        # Initialize Bybit HTTP Client for REST API calls
         self.session = HTTP(
             testnet=self.testnet,
             api_key=api_key,
             api_secret=api_secret
         )
         
-        self.logger.info(f"Spot Trading Client initialized ({'testnet' if testnet else 'mainnet'})")
+        # Initialize WebSocket for real-time updates
+        self.ws = WebSocket(
+            testnet=self.testnet,
+            channel_type="private",
+            api_key=api_key,
+            api_secret=api_secret
+        )
+        
+        self.logger.info(f"Unified Spot Client initialized ({'testnet' if testnet else 'mainnet'})")
+    
+    # ============= Trading Methods (REST API) =============
     
     def place_spot_order(self, 
                         symbol: str,
@@ -86,12 +97,10 @@ class TradingClient:
             # Add any additional parameters
             order_params.update(kwargs)
             
-            self.logger.info(f"Placing spot order: {order_params}")
             response = self.session.place_order(**order_params)
             
             if response.get('retCode') == 0:
                 order_id = response['result']['orderId']
-                self.logger.info(f"Spot order placed successfully. Order ID: {order_id}")
                 return {
                     'success': True,
                     'order_id': order_id,
@@ -126,8 +135,6 @@ class TradingClient:
             Response from Bybit API
         """
         try:
-            self.logger.info(f"Cancelling spot order {order_id} for {symbol}")
-            
             response = self.session.cancel_order(
                 category=self.category,
                 symbol=symbol,
@@ -135,7 +142,6 @@ class TradingClient:
             )
             
             if response.get('retCode') == 0:
-                self.logger.info(f"Spot order {order_id} cancelled successfully")
                 return {
                     'success': True,
                     'order_id': order_id,
@@ -177,13 +183,10 @@ class TradingClient:
             if symbol:
                 params['symbol'] = symbol
                 
-            self.logger.info(f"Getting open spot orders with params: {params}")
-            
             response = self.session.get_open_orders(**params)
             
             if response.get('retCode') == 0:
                 orders = response['result']['list']
-                self.logger.info(f"Retrieved {len(orders)} open spot orders")
                 return {
                     'success': True,
                     'orders': orders,
@@ -226,13 +229,10 @@ class TradingClient:
             if symbol:
                 params['symbol'] = symbol
                 
-            self.logger.info(f"Getting spot order history with params: {params}")
-            
             response = self.session.get_order_history(**params)
             
             if response.get('retCode') == 0:
                 orders = response['result']['list']
-                self.logger.info(f"Retrieved {len(orders)} historical spot orders")
                 return {
                     'success': True,
                     'orders': orders,
@@ -253,25 +253,29 @@ class TradingClient:
                 'error': str(e)
             }
     
-    def get_spot_balance(self, coin: Optional[str] = None) -> Dict[str, Any]:
+    def get_spot_balance(self, coin: Optional[str] = None, account_type: Optional[str] = None) -> Dict[str, Any]:
         """
         Get spot wallet balance.
         
         Args:
             coin: Specific coin to check balance (optional, e.g., 'BTC', 'USDT')
+            account_type: Account type to check (optional, e.g., 'UNIFIED', 'FUND', 'SPOT', 'CONTRACT')
+                         If not specified, defaults to 'UNIFIED' for testnet, 'SPOT' for mainnet
             
         Returns:
             Spot wallet balance information
         """
         try:
-            # Testnet uses UNIFIED account type
-            params = {'accountType': 'UNIFIED' if self.testnet else 'SPOT'}
+            # Allow user to specify account type, or use defaults
+            if account_type:
+                params = {'accountType': account_type}
+            else:
+                # Default behavior: UNIFIED for testnet, SPOT for mainnet
+                params = {'accountType': 'UNIFIED' if self.testnet else 'SPOT'}
             
             if coin:
                 params['coin'] = coin
                 
-            self.logger.info(f"Getting spot balance for {coin if coin else 'all coins'}")
-            
             response = self.session.get_wallet_balance(**params)
             
             if response.get('retCode') == 0:
@@ -279,8 +283,6 @@ class TradingClient:
                 
                 # Extract coin balances
                 coins = balance_data.get('coin', [])
-                
-                self.logger.info(f"Retrieved balance for {len(coins)} coins")
                 return {
                     'success': True,
                     'coins': coins,
@@ -313,8 +315,6 @@ class TradingClient:
             Ticker information including current price
         """
         try:
-            self.logger.info(f"Getting ticker for {symbol}")
-            
             response = self.session.get_tickers(
                 category=self.category,
                 symbol=symbol
@@ -324,7 +324,6 @@ class TradingClient:
                 tickers = response['result']['list']
                 if tickers:
                     ticker = tickers[0]
-                    self.logger.info(f"Ticker for {symbol}: Price={ticker.get('lastPrice')}")
                     return {
                         'success': True,
                         'symbol': symbol,
@@ -353,3 +352,119 @@ class TradingClient:
                 'success': False,
                 'error': str(e)
             }
+    
+    # ============= WebSocket Methods (Real-time Updates) =============
+    
+    def subscribe_orders(self, callback: Callable[[Dict], None]) -> bool:
+        """
+        Subscribe to real-time spot order updates.
+        
+        Args:
+            callback: Function to call when order update is received
+            
+        Returns:
+            True if subscription successful
+        """
+        try:
+            # Subscribe to order topic with direct callback
+            self.ws.subscribe(topic="order", callback=callback)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to subscribe to orders: {e}")
+            return False
+    
+    def subscribe_executions(self, callback: Callable[[Dict], None]) -> bool:
+        """
+        Subscribe to real-time execution (trade fill) updates.
+        
+        Args:
+            callback: Function to call when execution update is received
+            
+        Returns:
+            True if subscription successful
+        """
+        try:
+            # Subscribe to execution topic with direct callback
+            self.ws.subscribe(topic="execution", callback=callback)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to subscribe to executions: {e}")
+            return False
+    
+    def subscribe_wallet(self, callback: Callable[[Dict], None]) -> bool:
+        """
+        Subscribe to real-time wallet/balance updates.
+        
+        Args:
+            callback: Function to call when wallet update is received
+            
+        Returns:
+            True if subscription successful
+        """
+        try:
+            # Subscribe to wallet topic with direct callback
+            self.ws.subscribe(topic="wallet", callback=callback)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to subscribe to wallet: {e}")
+            return False
+    
+    def subscribe_custom(self, 
+                        topic: str,
+                        callback: Callable[[Dict], None]) -> bool:
+        """
+        Subscribe to a custom topic with raw message handling.
+        
+        Args:
+            topic: WebSocket topic to subscribe to
+            callback: Function to call when message is received
+            
+        Returns:
+            True if subscription successful
+        """
+        try:
+            self.ws.subscribe(topic=topic, callback=callback)
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to subscribe to {topic}: {e}")
+            return False
+    
+    def unsubscribe(self, topic: str) -> bool:
+        """
+        Unsubscribe from a topic.
+        
+        Args:
+            topic: Topic to unsubscribe from
+            
+        Returns:
+            True if unsubscription successful
+        """
+        try:
+            self.ws.unsubscribe(topic=topic)
+            return True
+                
+        except Exception as e:
+            self.logger.error(f"Failed to unsubscribe from {topic}: {e}")
+            return False
+    
+    def start_websocket(self):
+        """
+        Start the WebSocket connection for real-time updates.
+        
+        The pybit WebSocket manages its own thread internally.
+        """
+        # pybit WebSocket runs in its own thread automatically
+        # No action needed as WebSocket starts on first subscription
+    
+    def stop_websocket(self):
+        """Stop the WebSocket connection."""
+        self.ws.exit()
+    
+    def disconnect(self):
+        """Gracefully disconnect all connections."""
+        # Stop WebSocket
+        self.stop_websocket()
