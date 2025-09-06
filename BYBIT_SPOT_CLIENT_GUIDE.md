@@ -44,7 +44,7 @@ pip install websocket-client==1.6.4
 
 ### Project Structure
 ```
-order_client/
+bybit_spot_client/
 ├── client/
 │   ├── bybit_spot_client.py    # Main client library
 │   └── ...
