@@ -6,6 +6,7 @@
 !.gitignore
 !README.md
 !bybit_spot_client.py
+!Bybit_ltp_ws_client.py
 !BYBIT_SPOT_CLIENT_GUIDE.md
 
 # Always ignore Python cache
